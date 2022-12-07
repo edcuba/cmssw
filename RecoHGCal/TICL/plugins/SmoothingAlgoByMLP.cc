@@ -134,10 +134,6 @@ void SmoothingAlgoByMLP::SmoothingAlgoByMLP(
   std::vector<std::vector<int64_t>> input_shapes;
 
   std::vector<float> features;
-  // For nearest neighbour finding
-  std::vector<float> barycenters_x;
-  std::vector<float> barycenters_y;
-  std::vector<float> barycenters_z;
 
   // Assuming this method is called per event
   // steps:
@@ -155,6 +151,13 @@ void SmoothingAlgoByMLP::SmoothingAlgoByMLP(
       continue;
     }
 
+
+    const Vector &barycenter = ts.barycenter();
+    const Vector &eigenvector0 = ts.eigenvectors(0);
+    const std::array<float, 3> &eigenvalues = ts.eigenvalues();
+    const std::array<float, 3> &sigmasPCA = ts.sigmasPCA();
+
+
     // 1. we got a major trackster we want to smooth
     std::cout << "Trackster " << i << "--------------------" << std::endl;
     std::cout << "Raw Energy: " << raw_energy << std::endl;
@@ -168,7 +171,9 @@ void SmoothingAlgoByMLP::SmoothingAlgoByMLP(
     // assume we got this for now
     const float min_z;
     const float max_z;
-    const float bx, by, bz;
+    const float bx = barycenter.x();
+    const float by = barycenter.y();
+    const float bz = barycenter.z();
 
     /*
       Representative points of the cone (alternatively use min_z, max_z)
@@ -179,67 +184,89 @@ void SmoothingAlgoByMLP::SmoothingAlgoByMLP(
       return x1, x2
     */
 
+    // Loop over tracksters and see if they are in the cone
+    for (unsigned ci = 0; ci < tracksters.size(); ++ci) {
 
-    // Loop over tracksters and see if they are in the cone:
-    /*
-    in_cone = []
-    for i, x0 in enumerate(barycentres):
-        # barycenter between the first and last layer
-        if x0[2] > x1[2] - radius and x0[2] < x2[2] + radius:
-            # distance from the particle axis less than X cm
-            d = np.linalg.norm(np.cross(x0 - x1, x0 - x2)) / np.linalg.norm(x2 - x1)
-            if d < radius:
-                in_cone.append((i, d))
-    return in_cone
-    */
+      // no self loops
+      if (ci == i) {
+        continue;
+      }
 
-    // For each trackster in cone add the features
+      // candidate trackster
+      const auto &ct = tracksters[ci];
+
+      /*
+        in_cone = []
+        for i, x0 in enumerate(barycentres):
+            # barycenter between the first and last layer
+            if x0[2] > x1[2] - radius and x0[2] < x2[2] + radius:
+                # distance from the particle axis less than X cm
+                d = np.linalg.norm(np.cross(x0 - x1, x0 - x2)) / np.linalg.norm(x2 - x1)
+                if d < radius:
+                    in_cone.append((i, d))
+        return in_cone
+      */
+
+      features.push_back(barycenter.x());     // 0
+      features.push_back(barycenter.y());     // 1
+      features.push_back(barycenter.z());     // 2
+      features.push_back(raw_energy);         // 3
+      features.push_back(ts.raw_em_energy()); // 4
+      features.push_back(eigenvalues[0]);     // 5
+      features.push_back(eigenvalues[1]);     // 6
+      features.push_back(eigenvalues[2]);     // 7
+      features.push_back(eigenvector0.x());   // 8
+      features.push_back(eigenvector0.y());   // 9
+      features.push_back(eigenvector0.z());   // 10
+      features.push_back(sigmasPCA[0]);       // 11
+      features.push_back(sigmasPCA[1]);       // 12
+      features.push_back(sigmasPCA[2]);       // 13
+
+      const Vector &c_barycenter = ct.barycenter();
+      const Vector &c_eigenvector0 = ct.eigenvectors(0);
+      const std::array<float, 3> &c_eigenvalues = ct.eigenvalues();
+      const std::array<float, 3> &_sigmasPCA = ct.sigmasPCA();
+
+      features.push_back(c_barycenter.x());     // 14
+      features.push_back(c_barycenter.y());     // 15
+      features.push_back(c_barycenter.z());     // 16
+      features.push_back(ct.raw_energy());      // 17
+      features.push_back(ct.raw_em_energy());   // 18
+      features.push_back(c_eigenvalues[0]);     // 19
+      features.push_back(c_eigenvalues[1]);     // 20
+      features.push_back(c_eigenvalues[2]);     // 21
+      features.push_back(c_eigenvector0.x());   // 22
+      features.push_back(c_eigenvector0.y());   // 23
+      features.push_back(c_eigenvector0.z());   // 24
+      features.push_back(c_sigmasPCA[0]);       // 25
+      features.push_back(c_sigmasPCA[1]);       // 26
+      features.push_back(c_sigmasPCA[2]);       // 27
+
+      // 28 min_z_point_x,
+      // 29 min_z_point_y,
+      // 30 min_z_point_z,
+      // 31 max_z_point_x,
+      // 32 max_z_point_y,
+      // 33 max_z_point_z,
+
+      // // candidate trackster
+      // 34 min_z_point_x,
+      // 35 min_z_point_y,
+      // 36 min_z_point_z,
+      // 37 max_z_point_x,
+      // 38 max_z_point_y,
+      // 39 max_z_point_z,
+
+      // // shared
+      // 40 min_pairwise_planear_distance,
+
+      features.push_back(ts.vertices().size()); // 41
+      features.push_back(ct.vertices().size()); // 42
+    }
+
+
     // keep track of the shape
-
-
-    // std::cout << "Barycenter X: " << ts.barycenter().x() << std::endl;
-    // std::cout << "Barycenter Y: " << ts.barycenter().y() << std::endl;
-    // std::cout << "Barycenter Z: " << ts.barycenter().z() << std::endl;
-
-    Vector eigenvector0 = ts.eigenvectors(0);
-    // std::cout << "eVector0 X: " << eigenvector0.x() << std::endl;
-    // std::cout << "eVector0 Y: " << eigenvector0.y() << std::endl;
-    // std::cout << "eVector0 Z: " << eigenvector0.z() << std::endl;
-
-    std::array<float, 3> eigenvalues = ts.eigenvalues();
-    // std::cout << "EV1: " << eigenvalues[0] << std::endl;
-    // std::cout << "EV2: " << eigenvalues[1] << std::endl;
-    // std::cout << "EV3: " << eigenvalues[2] << std::endl;
-
-    std::array<float, 3> sigmasPCA = ts.sigmasPCA();
-    // std::cout << "sigmaPCA1: " << sigmasPCA[0] << std::endl;
-    // std::cout << "sigmaPCA2: " << sigmasPCA[1] << std::endl;
-    // std::cout << "sigmaPCA3: " << sigmasPCA[2] << std::endl;
-
-    // size
-    std::cout << "Size: " << ts.vertices().size() << std::endl;
-    std::cout << "Raw EM Energy: " << ts.raw_em_energy() << std::endl;
-
     // candidate labels
-    features.push_back(ts.barycenter().x());
-    features.push_back(ts.barycenter().y());
-    features.push_back(ts.barycenter().z());
-    features.push_back(eigenvector0.x());
-    features.push_back(eigenvector0.y());
-    features.push_back(eigenvector0.z());
-    features.push_back(eigenvalues[0]);
-    features.push_back(eigenvalues[1]);
-    features.push_back(eigenvalues[2]);
-    features.push_back(sigmasPCA[0]);
-    features.push_back(sigmasPCA[1]);
-    features.push_back(sigmasPCA[2]);
-    features.push_back(ts.vertices().size());
-    features.push_back(ts.raw_energy());
-    features.push_back(ts.raw_em_energy());
-
-    barycenters_x.push_back(ts.barycenter().x());
-    barycenters_y.push_back(ts.barycenter().y());
-    barycenters_z.push_back(ts.barycenter().z());
 
 
     std::cout << "--------------------" << std::endl;
