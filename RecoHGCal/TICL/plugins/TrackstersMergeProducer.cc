@@ -625,7 +625,8 @@ void TrackstersMergeProducer::fillDescriptions(edm::ConfigurationDescriptions &d
 
   edm::ParameterSetDescription linkingDesc;
   // Change here for different linking algorithm: LinkingAlgoByGNN, LinkingAlgoByDirectionGeometric
-  linkingDesc.addNode(edm::PluginDescription<LinkingAlgoFactory>("type", "LinkingAlgoByGNN", true));
+  // The same for Smoothing Algorithms: SmoothingAlgoByMLP (might be separate later)
+  linkingDesc.addNode(edm::PluginDescription<LinkingAlgoFactory>("type", "SmoothingAlgoByMLP", true));
   desc.add<edm::ParameterSetDescription>("linkingPSet", linkingDesc);
 
   desc.add<edm::InputTag>("trackstersclue3d", edm::InputTag("ticlTrackstersCLUE3DHigh"));
