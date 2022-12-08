@@ -43,6 +43,7 @@ namespace ticl {
                         std::vector<TICLCandidate> &,
                         std::vector<TICLCandidate> &,
                         const TICLGraph &,
+                        const std::vector<reco::CaloCluster> &,
                         const ONNXRuntime *cache) override;
 
     static void fillPSetDescription(edm::ParameterSetDescription &desc);

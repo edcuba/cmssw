@@ -1,6 +1,7 @@
 
 #include <cmath>
 #include <string>
+
 #include "RecoHGCal/TICL/plugins/SmoothingAlgoByMLP.h"
 
 #include "DataFormats/GeometrySurface/interface/BoundDisk.h"
@@ -104,7 +105,7 @@ void SmoothingAlgoByMLP::initialize(
   42 num_lc
 */
 
-void SmoothingAlgoByMLP::SmoothingAlgoByMLP(
+void SmoothingAlgoByMLP::linkTracksters(
     const edm::Handle<std::vector<reco::Track>> tkH,
     const edm::ValueMap<float> &tkTime,
     const edm::ValueMap<float> &tkTimeErr,
@@ -113,15 +114,16 @@ void SmoothingAlgoByMLP::SmoothingAlgoByMLP(
     const edm::Handle<std::vector<Trackster>> tsH,
     std::vector<TICLCandidate> &resultLinked,
     std::vector<TICLCandidate> &chargedHadronsFromTk,
-    const TICLGraph &ticlGraph, // do not need this
+    const TICLGraph &ticlGraph,
+    const std::vector<reco::CaloCluster>& layerClusters,
     const ONNXRuntime *cache)
 {
   std::cout << "Smoothing Algo by MLP " << std::endl;
-  const auto &tracks = *tkH;
+
   const auto &tracksters = *tsH;
 
-  auto bFieldProd = bfield_.product();
-  const Propagator &prop = (*propagator_);
+  const float classification_threshold = 0.7;
+  const float radius = 10;
 
   /** PREPARING FEATURES **/
 
@@ -130,59 +132,67 @@ void SmoothingAlgoByMLP::SmoothingAlgoByMLP(
   long int N = tracksters.size();
   const auto shapeFeatures = 43;
 
-  FloatArrays data;
-  std::vector<std::vector<int64_t>> input_shapes;
-
   std::vector<float> features;
+  std::vector<unsigned> big_tracksters;
+  std::vector<std::pair<unsigned, unsigned>> pairs;
 
   // Assuming this method is called per event
   // steps:
   // 2. get_trackster_representative_points (min z-point, max z-point)
-  //  - idea simplify the cone creation, connect min and max-z points to create the cone
 
-  // Print out info about tracksters
   std::cout << "Number of tracksters in event: " << N << std::endl;
   for (unsigned i = 0; i < tracksters.size(); ++i) {
     const auto &ts = tracksters[i];
     const float raw_energy = ts.raw_energy();
 
+    // 1. we got a major trackster we want to smooth
     // ignore low energy tracksters
     if (raw_energy < 50) {
       continue;
     }
-
 
     const Vector &barycenter = ts.barycenter();
     const Vector &eigenvector0 = ts.eigenvectors(0);
     const std::array<float, 3> &eigenvalues = ts.eigenvalues();
     const std::array<float, 3> &sigmasPCA = ts.sigmasPCA();
 
-
-    // 1. we got a major trackster we want to smooth
-    std::cout << "Trackster " << i << "--------------------" << std::endl;
-    std::cout << "Raw Energy: " << raw_energy << std::endl;
-
     // 2. get representative points of the trackster (where (0, 0, 0) -> (bx, by, bz) intersects the min and max layer)
-    // min_z = min(vertices_z[bigT])
-    // max_z = max(vertices_z[bigT])
-    // ts.vertices() are indexes to global collection - need to get the global collection retrieve the vertices
-    // and then find the minimum
+    const std::vector<unsigned int> &vertices_indices = ts.vertices();
 
-    // assume we got this for now
-    const float min_z;
-    const float max_z;
-    const float bx = barycenter.x();
-    const float by = barycenter.y();
-    const float bz = barycenter.z();
+    const auto max_z_lc_it = std::max_element(
+      vertices_indices.begin(),
+      vertices_indices.end(),
+      [&layerClusters](const int &a, const int &b) {
+        return layerClusters[a].z() > layerClusters[b].z();
+      }
+    );
 
-    /*
-      Representative points of the cone (alternatively use min_z, max_z)
-      t_min = min_z / bz
-      t_max = max_z / bz
-      x1 = np.array((t_min * bx, t_min * by, min_z))
-      x2 = np.array((t_max * bx, t_max * by, max_z))
-      return x1, x2
-    */
+    const auto min_z_lc_it = std::min_element(
+      vertices_indices.begin(),
+      vertices_indices.end(),
+      [&layerClusters](const int &a, const int &b) {
+        return layerClusters[a].z() > layerClusters[b].z();
+      }
+    );
+
+    const reco::CaloCluster &min_z_lc = layerClusters[*min_z_lc_it];
+    const reco::CaloCluster &max_z_lc = layerClusters[*max_z_lc_it];
+
+    // compute the cylinder bounds
+    const float t_min = min_z_lc.z() / barycenter.z();
+    const float t_max = max_z_lc.z() / barycenter.z();
+
+    const Vector x1 = Vector(
+      t_min * barycenter.x(),
+      t_min * barycenter.y(),
+      min_z_lc.z()
+    );
+
+    const Vector x2 = Vector(
+      t_max * barycenter.x(),
+      t_max * barycenter.y(),
+      min_z_lc.z()
+    );
 
     // Loop over tracksters and see if they are in the cone
     for (unsigned ci = 0; ci < tracksters.size(); ++ci) {
@@ -195,127 +205,138 @@ void SmoothingAlgoByMLP::SmoothingAlgoByMLP(
       // candidate trackster
       const auto &ct = tracksters[ci];
 
-      /*
-        in_cone = []
-        for i, x0 in enumerate(barycentres):
-            # barycenter between the first and last layer
-            if x0[2] > x1[2] - radius and x0[2] < x2[2] + radius:
-                # distance from the particle axis less than X cm
-                d = np.linalg.norm(np.cross(x0 - x1, x0 - x2)) / np.linalg.norm(x2 - x1)
-                if d < radius:
-                    in_cone.append((i, d))
-        return in_cone
-      */
-
-      features.push_back(barycenter.x());     // 0
-      features.push_back(barycenter.y());     // 1
-      features.push_back(barycenter.z());     // 2
-      features.push_back(raw_energy);         // 3
-      features.push_back(ts.raw_em_energy()); // 4
-      features.push_back(eigenvalues[0]);     // 5
-      features.push_back(eigenvalues[1]);     // 6
-      features.push_back(eigenvalues[2]);     // 7
-      features.push_back(eigenvector0.x());   // 8
-      features.push_back(eigenvector0.y());   // 9
-      features.push_back(eigenvector0.z());   // 10
-      features.push_back(sigmasPCA[0]);       // 11
-      features.push_back(sigmasPCA[1]);       // 12
-      features.push_back(sigmasPCA[2]);       // 13
-
       const Vector &c_barycenter = ct.barycenter();
       const Vector &c_eigenvector0 = ct.eigenvectors(0);
       const std::array<float, 3> &c_eigenvalues = ct.eigenvalues();
-      const std::array<float, 3> &_sigmasPCA = ct.sigmasPCA();
+      const std::array<float, 3> &c_sigmasPCA = ct.sigmasPCA();
 
-      features.push_back(c_barycenter.x());     // 14
-      features.push_back(c_barycenter.y());     // 15
-      features.push_back(c_barycenter.z());     // 16
-      features.push_back(ct.raw_energy());      // 17
-      features.push_back(ct.raw_em_energy());   // 18
-      features.push_back(c_eigenvalues[0]);     // 19
-      features.push_back(c_eigenvalues[1]);     // 20
-      features.push_back(c_eigenvalues[2]);     // 21
-      features.push_back(c_eigenvector0.x());   // 22
-      features.push_back(c_eigenvector0.y());   // 23
-      features.push_back(c_eigenvector0.z());   // 24
-      features.push_back(c_sigmasPCA[0]);       // 25
-      features.push_back(c_sigmasPCA[1]);       // 26
-      features.push_back(c_sigmasPCA[2]);       // 27
+      const std::vector<unsigned int> &c_vertices_indices = ct.vertices();
 
-      // 28 min_z_point_x,
-      // 29 min_z_point_y,
-      // 30 min_z_point_z,
-      // 31 max_z_point_x,
-      // 32 max_z_point_y,
-      // 33 max_z_point_z,
+      const auto c_max_z_lc_it = std::max_element(
+        c_vertices_indices.begin(),
+        c_vertices_indices.end(),
+        [&layerClusters](const int &a, const int &b) {
+          return layerClusters[a].z() > layerClusters[b].z();
+        }
+      );
 
-      // // candidate trackster
-      // 34 min_z_point_x,
-      // 35 min_z_point_y,
-      // 36 min_z_point_z,
-      // 37 max_z_point_x,
-      // 38 max_z_point_y,
-      // 39 max_z_point_z,
+      const auto c_min_z_lc_it = std::min_element(
+        c_vertices_indices.begin(),
+        c_vertices_indices.end(),
+        [&layerClusters](const int &a, const int &b) {
+          return layerClusters[a].z() > layerClusters[b].z();
+        }
+      );
 
-      // // shared
-      // 40 min_pairwise_planear_distance,
+      const reco::CaloCluster &c_min_z_lc = layerClusters[*c_min_z_lc_it];
+      const reco::CaloCluster &c_max_z_lc = layerClusters[*c_max_z_lc_it];
 
-      features.push_back(ts.vertices().size()); // 41
-      features.push_back(ct.vertices().size()); // 42
+      // compute the distance and position in the cone
+      if (c_barycenter.z() < x1.z() - radius || c_barycenter.z() > x2.z() + radius) {
+        // not in z-cone bounds
+        continue;
+      }
+
+      // d = np.linalg.norm(np.cross(x0 - x1, x0 - x2)) / np.linalg.norm(x2 - x1)
+      const float distance = (c_barycenter - x1).Cross(c_barycenter - x2).R() / (x2 - x1).R();
+
+      if (distance > radius) {
+        // not in cone
+        continue;
+      }
+
+      features.insert(features.end(), {
+        (float) barycenter.x(),     // 0
+        (float) barycenter.y(),     // 1
+        (float) barycenter.z(),     // 2
+        (float) raw_energy,         // 3
+        (float) ts.raw_em_energy(), // 4
+        (float) eigenvalues[0],     // 5
+        (float) eigenvalues[1],     // 6
+        (float) eigenvalues[2],     // 7
+        (float) eigenvector0.x(),   // 8
+        (float) eigenvector0.y(),   // 9
+        (float) eigenvector0.z(),   // 10
+        (float) sigmasPCA[0],       // 11
+        (float) sigmasPCA[1],       // 12
+        (float) sigmasPCA[2],       // 13
+        (float) c_barycenter.x(),   // 14
+        (float) c_barycenter.y(),   // 15
+        (float) c_barycenter.z(),   // 16
+        (float) ct.raw_energy(),    // 17
+        (float) ct.raw_em_energy(), // 18
+        (float) c_eigenvalues[0],   // 19
+        (float) c_eigenvalues[1],   // 20
+        (float) c_eigenvalues[2],   // 21
+        (float) c_eigenvector0.x(), // 22
+        (float) c_eigenvector0.y(), // 23
+        (float) c_eigenvector0.z(), // 24
+        (float) c_sigmasPCA[0],     // 25
+        (float) c_sigmasPCA[1],     // 26
+        (float) c_sigmasPCA[2],     // 27
+        (float) min_z_lc.x(),       // 28
+        (float) min_z_lc.y(),       // 29
+        (float) min_z_lc.z(),       // 30
+        (float) max_z_lc.x(),       // 31
+        (float) max_z_lc.y(),       // 32
+        (float) max_z_lc.z(),       // 33
+        (float) c_min_z_lc.x(),     // 34
+        (float) c_min_z_lc.y(),     // 35
+        (float) c_min_z_lc.z(),     // 36
+        (float) c_max_z_lc.x(),     // 37
+        (float) c_max_z_lc.y(),     // 38
+        (float) c_max_z_lc.z(),     // 39
+        (float) distance,           // 40
+        (float) ts.vertices().size(), // 41
+        (float) ct.vertices().size() // 42
+      });
+
+      // keep track of the samples
+      pairs.push_back(std::make_pair(i, ci));
+
+      if (big_tracksters.back() != i) {
+        // keep tracks of big tracksters
+        big_tracksters.push_back(i);
+      }
     }
-
-
-    // keep track of the shape
-    // candidate labels
-
-
-    std::cout << "--------------------" << std::endl;
   }
 
   /** RUNNING THE NETWORK **/
 
-  // Get network output
+  // Prepare network input
+  std::vector<std::vector<int64_t>> input_shapes;
+  input_shapes.push_back({ (int64_t) pairs.size(), shapeFeatures });
+
+  FloatArrays data;
+  data.emplace_back(features);
+
+  // get the network output
   std::vector<float> edge_predictions = cache->run(input_names, data, input_shapes)[0];
 
-  for (int i = 0; i < static_cast<int>(edge_predictions.size()); i++) {
-    std::cout << "Network output for edge " << data[1][i] << "-" << data[1][numEdges + i]
-              << " is: " << edge_predictions[i] << std::endl;
-  }
 
-  // Create a graph
-  Graph g;
-  const auto classification_threshold = 0.7;
-
-  // Self-loop for not connected nodes
-  for (int i = 0; i < N; i++){
-    g.addEdge(i, i);
-  }
-  // Building a predicted graph
-  for (int i = 0; i < numEdges; i++) {
-    if (edge_predictions[i] >= classification_threshold) {
-      auto src = data[1][i];
-      auto dst = data[1][numEdges + i];
-      // Make undirectional
-      g.addEdge(src, dst);
-      g.addEdge(dst, src);
-    }
-  }
-
-  std::cout << "Following is Depth First Traversal" << std::endl;
-  std::cout << "Connected components are: " << std::endl;
-  g.DFS();
-
-  int i = 0;
+  // interpret the results
   std::vector<TICLCandidate> connectedCandidates;
 
-  for (auto &component : g.connected_components) {
+  for (const int bt : big_tracksters) {
+
     TICLCandidate tracksterCandidate;
-    for (auto &trackster_id : component) {
-      std::cout << "Component " << i << ": trackster id " << trackster_id << std::endl;
-      tracksterCandidate.addTrackster(edm::Ptr<Trackster>(tsH, trackster_id));
+    tracksterCandidate.addTrackster(edm::Ptr<Trackster>(tsH, bt));
+
+    int yi = 0;
+    for (auto &p : pairs) {
+      const int pi = p.first;
+      const int pj = p.second;
+
+      if (bt == pi && edge_predictions[yi++] > classification_threshold) {
+        // check if the score is > threshold
+        tracksterCandidate.addTrackster(edm::Ptr<Trackster>(tsH, pj));
+      }
     }
-    i++;
-    connectedCandidates.push_back(tracksterCandidate);
+
+    if (tracksterCandidate.tracksters().size() > 1) {
+      // if anything to connect to
+      connectedCandidates.push_back(tracksterCandidate);
+    }
   }
 
   // The final candidates are passed to `resultLinked`
@@ -324,7 +345,7 @@ void SmoothingAlgoByMLP::SmoothingAlgoByMLP(
 }  // linkTracksters
 
 
-void LinkingAlgoByGNN::fillPSetDescription(edm::ParameterSetDescription &desc) {
+void SmoothingAlgoByMLP::fillPSetDescription(edm::ParameterSetDescription &desc) {
   desc.add<std::string>("cutTk",
                         "1.48 < abs(eta) < 3.0 && pt > 1. && quality(\"highPurity\") && "
                         "hitPattern().numberOfLostHits(\"MISSING_OUTER_HITS\") < 5");

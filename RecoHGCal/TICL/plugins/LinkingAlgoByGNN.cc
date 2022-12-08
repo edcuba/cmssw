@@ -34,7 +34,7 @@ public:
 };
 
 void Graph::addEdge(int v, int w) {
-  adj[v].push_back(w);  // Add w to v’s list.
+  adj[v].push_back(w);  // Add w to vï¿½s list.
 }
 
 void Graph::DFSUtil(int v) {
@@ -96,8 +96,9 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
                                       std::vector<TICLCandidate> &resultLinked,
                                       std::vector<TICLCandidate> &chargedHadronsFromTk,
                                       const TICLGraph &ticlGraph,
+                                      const std::vector<reco::CaloCluster>& layerClusters,
                                       const ONNXRuntime *cache) {
-                                      
+
   std::cout << "Linking Algo by GNN " << std::endl;
   const auto &tracks = *tkH;
   const auto &tracksters = *tsH;
@@ -118,7 +119,7 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
   std::vector<float> barycenters_x;
   std::vector<float> barycenters_y;
   std::vector<float> barycenters_z;
-  
+
 
   // Print out info about tracksters
   std::cout << "Number of tracksters in event: " << N << std::endl;
@@ -151,7 +152,7 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
 
     // candidate labels
     /* Python:
-    
+
     in_candidate = [-1 for i in range(trk_data[ev].NTracksters)]
             for indx, cand in enumerate(cand_data[ev].tracksters_in_candidate):
                 for ts in cand:
@@ -159,7 +160,7 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
     */
     features.push_back(ts.barycenter().x());
     features.push_back(ts.barycenter().y());
-    features.push_back(ts.barycenter().z());    
+    features.push_back(ts.barycenter().z());
     features.push_back(eigenvector0.x());
     features.push_back(eigenvector0.y());
     features.push_back(eigenvector0.z());
@@ -172,11 +173,11 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
     features.push_back(ts.vertices().size());
     features.push_back(ts.raw_energy());
     features.push_back(ts.raw_em_energy());
-    
+
     barycenters_x.push_back(ts.barycenter().x());
     barycenters_y.push_back(ts.barycenter().y());
     barycenters_z.push_back(ts.barycenter().z());
-    
+
 
     std::cout << "--------------------" << std::endl;
   }
@@ -194,11 +195,11 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
       edges_src.push_back(static_cast<float>(i_neighbour));
       edges_dst.push_back(static_cast<float>(i));
     }
-    
-    /* 
+
+    /*
     // Nearest Neighbour connection
     if (len(ticlGraph.getNode(i).getInner()) == 0 && len(ticlGraph.getNode(i).getOuter()) == 0){
-     
+
       const auto pos_i = [barycenters_x[i], barycenters_y[i], barycenters_z[i]];
       const auto d_least = 1000;
       for (auto k=0; k< len(barycenters_x; k++){
@@ -213,7 +214,7 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
               i_least = k;
           }
       }
-              
+
       const auto nearest_id = findNearestNeighbour(i, b_x, b_y, b_z)
       edges_src.push_back(static_cast<float>(nearest_id));
       edges_dst.push_back(static_cast<float>(i));
@@ -222,24 +223,24 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
   }
 
   auto numEdges = static_cast<int>(edges_src.size());
-  
+
   // Do not run the network in these cases
   if (numEdges == 0 || N < 2){
-  
+
     std::vector<TICLCandidate> connectedCandidates;
-  
+
     for (int trackster_id = 0; trackster_id < N; trackster_id++) {
-    
+
       TICLCandidate tracksterCandidate;
       tracksterCandidate.addTrackster(edm::Ptr<Trackster>(tsH, trackster_id));
       connectedCandidates.push_back(tracksterCandidate);
     }
-  
+
     // The final candidates are passed to `resultLinked`
     resultLinked.insert(std::end(resultLinked), std::begin(connectedCandidates), std::end(connectedCandidates));
     return;
   }
-  
+
   input_shapes.push_back({1, 2, numEdges});
   std::cout << "Num edges: " << numEdges << std::endl;
 
@@ -248,11 +249,11 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
     data.back().push_back(dst);
   }
 
-  
+
   // Creating Adjacency matrix and trackster index
   std::vector<float> A;
   std::vector<float> trackster_index;
-  
+
   // Add self-loops
   /*
   for (int i=0; i<N; i++){
@@ -268,7 +269,7 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
     }
   }
   */
-  
+
   // Add undirectional edges
   for (int i=0; i<numEdges; i++){
     // for source
@@ -278,7 +279,7 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
       if (j == edges_dst[i]){trackster_index.push_back(1.);}
       else {trackster_index.push_back(0.);}
     }
-    
+
     // for dst
     for (int j=0; j<N; j++){
       if (j == edges_dst[i]){A.push_back(1.);}
@@ -287,14 +288,14 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
       else {trackster_index.push_back(0.);}
     }
   }
-  
+
   //input_shapes.push_back({1, 2*numEdges+N, N});
   input_shapes.push_back({1, 2*numEdges, N});
   data.emplace_back(A);
   //input_shapes.push_back({1, 2*numEdges+N, N});
   input_shapes.push_back({1, 2*numEdges, N});
   data.emplace_back(trackster_index);
-  
+
   std::cout << "Adj size: " << A.size() << std::endl;
 
   // Get network output

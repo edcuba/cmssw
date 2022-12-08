@@ -290,6 +290,7 @@ void TrackstersMergeProducer::produce(edm::Event &evt, const edm::EventSetup &es
                                *resultCandidates,
                                *resultFromTracks,
                                ticlGraph,
+                               layerClusters,
                                globalCache());
   std::cout << " Run Links " << std::endl;
 
@@ -664,8 +665,10 @@ void TrackstersMergeProducer::fillDescriptions(edm::ConfigurationDescriptions &d
   desc.add<double>("eid_min_cluster_energy", 2.5);
   desc.add<int>("eid_n_layers", 50);
   desc.add<int>("eid_n_clusters", 10);
-  desc.add<edm::FileInPath>("model_path",
-                            edm::FileInPath("RecoHGCal/TICL/data/tf_models/model_gcnn_pion.onnx"));
+  desc.add<edm::FileInPath>(
+    "model_path",
+    edm::FileInPath("RecoHGCal/TICL/data/tf_models/PairWiseMLP.16.4.16.51e-CloseByGamma200PUFull.10.0.2.100f.onnx")
+  );
   descriptions.add("trackstersMergeProducer", desc);
 }
 
