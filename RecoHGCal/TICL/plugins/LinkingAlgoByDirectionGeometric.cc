@@ -243,6 +243,7 @@ void LinkingAlgoByDirectionGeometric::linkTracksters(const edm::Handle<std::vect
                                                      std::vector<double>& prop_tracks_pz,
                                                      std::vector<bool>& masked_tracks, 
                                                      const TICLGraph &ticlGraph,
+                                                     const std::vector<reco::CaloCluster>& layerClusters,
                                                      const ONNXRuntime *cache) {
   constexpr double mpion = 0.13957;
   constexpr float mpion2 = mpion * mpion;

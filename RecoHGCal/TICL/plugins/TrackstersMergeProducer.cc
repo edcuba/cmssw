@@ -192,11 +192,11 @@ TrackstersMergeProducer::TrackstersMergeProducer(const edm::ParameterSet &ps, co
   produces<std::vector<double>>("hgcaltracksX");
   produces<std::vector<double>>("hgcaltracksY");
   produces<std::vector<double>>("hgcaltracksZ");
-  produces<std::vector<double>>("hgcaltracksEta"); 
-  produces<std::vector<double>>("hgcaltracksPhi"); 
-  produces<std::vector<double>>("hgcaltracksPx");  
-  produces<std::vector<double>>("hgcaltracksPy");  
-  produces<std::vector<double>>("hgcaltracksPz");  
+  produces<std::vector<double>>("hgcaltracksEta");
+  produces<std::vector<double>>("hgcaltracksPhi");
+  produces<std::vector<double>>("hgcaltracksPx");
+  produces<std::vector<double>>("hgcaltracksPy");
+  produces<std::vector<double>>("hgcaltracksPz");
 
   std::string detectorName_ = (detector_ == "HFNose") ? "HGCalHFNoseSensitive" : "HGCalEESensitive";
   hdc_token_ =
@@ -299,14 +299,14 @@ void TrackstersMergeProducer::produce(edm::Event &evt, const edm::EventSetup &es
   edm::Handle<TICLGraph> ticlGraph_h;
   evt.getByToken(ticlGraph_token_, ticlGraph_h);
   const auto &ticlGraph = *ticlGraph_h;
-  
+
   // Linking
   std::cout << " Run Links " << std::endl;
   masked_tracks->resize(tracks.size(), false);
   linkingAlgo_->linkTracksters(track_h, trackTime, trackTimeErr, trackTimeQual, muons,
                                trackstersclue3d_h, *resultCandidates,*resultFromTracks,
-                               *hgcaltracks_x,*hgcaltracks_y,*hgcaltracks_z,*hgcaltracks_eta,*hgcaltracks_phi,*hgcaltracks_px,*hgcaltracks_py,*hgcaltracks_pz,*masked_tracks, 
-                               ticlGraph, globalCache());
+                               *hgcaltracks_x,*hgcaltracks_y,*hgcaltracks_z,*hgcaltracks_eta,*hgcaltracks_phi,*hgcaltracks_px,*hgcaltracks_py,*hgcaltracks_pz,*masked_tracks,
+                               ticlGraph, layerClusters, globalCache());
   std::cout << " Run Links " << std::endl;
 
 
@@ -649,7 +649,7 @@ void TrackstersMergeProducer::fillDescriptions(edm::ConfigurationDescriptions &d
   edm::ParameterSetDescription desc;
 
   edm::ParameterSetDescription linkingDesc;
-  
+
   // Change here for different linking algorithm: LinkingAlgoByGNN, LinkingAlgoByDirectionGeometric
   // The same for Smoothing Algorithms: SmoothingAlgoByMLP (might be separate later)
   linkingDesc.addNode(edm::PluginDescription<LinkingAlgoFactory>("type", "SmoothingAlgoByMLP", true));
@@ -690,8 +690,10 @@ void TrackstersMergeProducer::fillDescriptions(edm::ConfigurationDescriptions &d
   desc.add<double>("eid_min_cluster_energy", 2.5);
   desc.add<int>("eid_n_layers", 50);
   desc.add<int>("eid_n_clusters", 10);
-  desc.add<edm::FileInPath>("model_path",
-                            edm::FileInPath("RecoHGCal/TICL/data/tf_models/pion_model.onnx"));
+  desc.add<edm::FileInPath>(
+    "model_path",
+    edm::FileInPath("RecoHGCal/TICL/data/tf_models/PairWiseMLP.16.4.16.51e-CloseByGamma200PUFull.10.0.2.100f.onnx")
+  );
   descriptions.add("trackstersMergeProducer", desc);
 }
 

@@ -15,6 +15,7 @@
 #include "DataFormats/Math/interface/Vector3D.h"
 #include "DataFormats/GeometrySurface/interface/BoundDisk.h"
 #include "DataFormats/HGCalReco/interface/TICLLayerTile.h"
+#include "DataFormats/CaloRecHit/interface/CaloCluster.h"
 
 #include "TrackingTools/Records/interface/TrackingComponentsRecord.h"
 
@@ -43,6 +44,7 @@ namespace ticl {
                         std::vector<TICLCandidate> &,
                         std::vector<TICLCandidate> &,
                         const TICLGraph &,
+                        const std::vector<reco::CaloCluster>& layerClusters,
                         const ONNXRuntime *cache) override;
 
     static void fillPSetDescription(edm::ParameterSetDescription &desc);
