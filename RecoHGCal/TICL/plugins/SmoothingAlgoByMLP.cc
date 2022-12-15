@@ -118,9 +118,8 @@ void SmoothingAlgoByMLP::linkTracksters(
     const std::vector<reco::CaloCluster>& layerClusters,
     const ONNXRuntime *cache)
 {
-  std::cout << "Smoothing Algo by MLP " << std::endl;
-
   const auto &tracksters = *tsH;
+  long int N = tracksters.size();
 
   const float classification_threshold = 0.7;
   const float radius = 10;
@@ -128,20 +127,18 @@ void SmoothingAlgoByMLP::linkTracksters(
   /** PREPARING FEATURES **/
 
   const std::vector<std::string> input_names = {"features"};
+  std::vector<float> features;
 
-  long int N = tracksters.size();
   const auto shapeFeatures = 43;
 
-  std::vector<float> features;
-  std::vector<unsigned> big_tracksters;
   std::vector<std::pair<unsigned, unsigned>> pairs;
 
   // Assuming this method is called per event
   // steps:
   // 2. get_trackster_representative_points (min z-point, max z-point)
 
-  std::cout << "Number of tracksters in event: " << N << std::endl;
   for (unsigned i = 0; i < tracksters.size(); ++i) {
+
     const auto &ts = tracksters[i];
     const float raw_energy = ts.raw_energy();
 
@@ -293,55 +290,70 @@ void SmoothingAlgoByMLP::linkTracksters(
 
       // keep track of the samples
       pairs.push_back(std::make_pair(i, ci));
-
-      if (big_tracksters.back() != i) {
-        // keep tracks of big tracksters
-        big_tracksters.push_back(i);
-      }
     }
   }
 
+  std::cout << "PAIRS EXTRACTED: " << pairs.size() << std::endl;
+
   /** RUNNING THE NETWORK **/
+  std::vector<float> edge_predictions;
+  if (pairs.size() > 0) {
 
-  // Prepare network input
-  std::vector<std::vector<int64_t>> input_shapes;
-  input_shapes.push_back({ (int64_t) pairs.size(), shapeFeatures });
+    // Prepare network input
+    std::vector<std::vector<int64_t>> input_shapes;
 
-  FloatArrays data;
-  data.emplace_back(features);
+    FloatArrays data;
+    data.emplace_back(features);
 
-  // get the network output
-  std::vector<float> edge_predictions = cache->run(input_names, data, input_shapes)[0];
+    input_shapes.push_back({ (int64_t) pairs.size(), shapeFeatures });
 
+    // get the network output
+    // input_names: list of the names of the input nodes ("features")
+    // input_values: list of input arrays for each input node. The order of `input_values` must match `input_names`.
+    // input_shapes: list of `int64_t` arrays specifying the shape of each input node. Can leave empty if the model does not have dynamic axes.
+    // output_names: names of the output nodes to get outputs from. Empty list means all output nodes.
+    // batch_size: number of samples in the batch. Each array in `input_values` must have a shape layout of (batch_size, ...).
+    edge_predictions = cache->run(input_names, data, input_shapes, {}, (int64_t) pairs.size())[0];
+  }
 
   // interpret the results
   std::vector<TICLCandidate> connectedCandidates;
 
-  for (const int bt : big_tracksters) {
+  for (int trackster_id = 0; trackster_id < N; ++trackster_id) {
+    bool skip = false;
 
     TICLCandidate tracksterCandidate;
-    tracksterCandidate.addTrackster(edm::Ptr<Trackster>(tsH, bt));
+    tracksterCandidate.addTrackster(edm::Ptr<Trackster>(tsH, trackster_id));
 
     int yi = 0;
     for (auto &p : pairs) {
       const int pi = p.first;
       const int pj = p.second;
+      const float score = edge_predictions[yi++];
 
-      if (bt == pi && edge_predictions[yi++] > classification_threshold) {
+      if (pj == trackster_id && score > classification_threshold) {
+        // the trackster is connected to another trackster
+        skip = true;
+        break;
+      }
+
+      if (trackster_id == pi && score > classification_threshold) {
+        // trackster is the main trackster
         // check if the score is > threshold
+        std::cout << "MERGING TRACKSTERS: (" << pi << ", " << pj << ")" << std::endl;
         tracksterCandidate.addTrackster(edm::Ptr<Trackster>(tsH, pj));
       }
     }
 
-    if (tracksterCandidate.tracksters().size() > 1) {
-      // if anything to connect to
+    if (!skip) {
       connectedCandidates.push_back(tracksterCandidate);
     }
   }
 
+  std::cout << "MLP Smoothing: " << N << " -> " << connectedCandidates.size() << std::endl;
+
   // The final candidates are passed to `resultLinked`
   resultLinked.insert(std::end(resultLinked), std::begin(connectedCandidates), std::end(connectedCandidates));
-
 }  // linkTracksters
 
 
