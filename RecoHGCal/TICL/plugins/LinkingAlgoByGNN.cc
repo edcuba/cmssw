@@ -1,4 +1,3 @@
-
 #include <cmath>
 #include <string>
 #include "RecoHGCal/TICL/plugins/LinkingAlgoByGNN.h"
@@ -108,22 +107,26 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
                                                      const TICLGraph &ticlGraph,
                                                      const std::vector<reco::CaloCluster>& layerClusters,
                                                      const ONNXRuntime *cache)  {
-  std::cout << "Linking Algo by GNN " << std::endl;
+  std::cout << "Linking Algo by GNN" << std::endl;
+  // Network input names
   const std::vector<std::string> input_names = {"features", "edge_index", "adj", "trackster_index"};
+  // Array of data to be filled as a network input. Should be a float array of flattened values.
+  FloatArrays data;
+  // Network input shapes.
+  std::vector<std::vector<int64_t>> input_shapes;
+  // Network feature shape.
+  const auto shapeFeatures = 15;
 
-  // Provide network with the test input
+  // TEST mode if 1, otherwise RUN mode. Test mode provides the network with a test input.
   const auto TEST = 0;
 
   if (TEST == 1){
 
     std::cout << "Providing GNN with a test input." << std::endl;
-    FloatArrays data;
-    std::vector<std::vector<int64_t>> input_shapes;
-
 
     // Test input
     const auto N = 10;
-    const auto shapeFeatures = 15;
+
     input_shapes.push_back({1, N, shapeFeatures});
     input_shapes.push_back({1, 2, 3*N});
     input_shapes.push_back({1, N, N});
@@ -175,70 +178,82 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
     const Propagator &prop = (*propagator_);
 
     long int N = tracksters.size();
-    const auto shapeFeatures = 15;
+    // Print out info about tracksters
+    std::cout << "Number of tracksters in event: " << N << std::endl;
 
-    FloatArrays data;
-    std::vector<std::vector<int64_t>> input_shapes;
+    if (N < 2){
+      // do not run the network - return the original tracksters
+      // TODO: the same if zero edges
+      std::cout << "Number of tracksters less than 2 - no linking is done." << std::endl;
+      std::vector<TICLCandidate> connectedCandidates;
+      TICLCandidate tracksterCandidate;
+
+      for (int trackster_id = 0; trackster_id < N; trackster_id++) {
+        tracksterCandidate.addTrackster(edm::Ptr<Trackster>(tsH, trackster_id));
+      }
+      connectedCandidates.push_back(tracksterCandidate);
+
+      // The final candidates are passed to `resultLinked`
+      resultLinked.insert(std::end(resultLinked), std::begin(connectedCandidates), std::end(connectedCandidates));
+      return;
+    }
 
     std::vector<float> features;
     // For nearest neighbour finding
-    std::vector<float> barycenters_x;
-    std::vector<float> barycenters_y;
-    std::vector<float> barycenters_z;
+    //std::vector<float> barycenters_x;
+    //std::vector<float> barycenters_y;
+    //std::vector<float> barycenters_z;
 
 
-    // Print out info about tracksters
-    //std::cout << "Number of tracksters in event: " << N << std::endl;
-    for (unsigned i = 0; i < tracksters.size(); ++i) {
+    for (unsigned i = 0; i < N; ++i) {
       const auto &ts = tracksters[i];
-      /*
-      std::cout << "Trackster " << i << "--------------------" << std::endl;
-      std::cout << "Barycenter X: " << ts.barycenter().x() << std::endl;
-      std::cout << "Barycenter Y: " << ts.barycenter().y() << std::endl;
-      std::cout << "Barycenter Z: " << ts.barycenter().z() << std::endl;
+
+      //std::cout << "Trackster " << i << "--------------------" << std::endl;
+      //std::cout << "Barycenter X: " << ts.barycenter().x() << std::endl;
+      //std::cout << "Barycenter Y: " << ts.barycenter().y() << std::endl;
+      //std::cout << "Barycenter Z: " << ts.barycenter().z() << std::endl;
 
       Vector eigenvector0 = ts.eigenvectors(0);
-      std::cout << "eVector0 X: " << eigenvector0.x() << std::endl;
-      std::cout << "eVector0 Y: " << eigenvector0.y() << std::endl;
-      std::cout << "eVector0 Z: " << eigenvector0.z() << std::endl;
+      //std::cout << "eVector0 X: " << eigenvector0.x() << std::endl;
+      //std::cout << "eVector0 Y: " << eigenvector0.y() << std::endl;
+      //std::cout << "eVector0 Z: " << eigenvector0.z() << std::endl;
 
       std::array<float, 3> eigenvalues = ts.eigenvalues();
-      std::cout << "EV1: " << eigenvalues[0] << std::endl;
-      std::cout << "EV2: " << eigenvalues[1] << std::endl;
-      std::cout << "EV3: " << eigenvalues[2] << std::endl;
+      //std::cout << "EV1: " << eigenvalues[0] << std::endl;
+      //std::cout << "EV2: " << eigenvalues[1] << std::endl;
+      //std::cout << "EV3: " << eigenvalues[2] << std::endl;
 
       std::array<float, 3> sigmasPCA = ts.sigmasPCA();
-      std::cout << "sigmaPCA1: " << sigmasPCA[0] << std::endl;
-      std::cout << "sigmaPCA2: " << sigmasPCA[1] << std::endl;
-      std::cout << "sigmaPCA3: " << sigmasPCA[2] << std::endl;
+      //std::cout << "sigmaPCA1: " << sigmasPCA[0] << std::endl;
+      //std::cout << "sigmaPCA2: " << sigmasPCA[1] << std::endl;
+      //std::cout << "sigmaPCA3: " << sigmasPCA[2] << std::endl;
 
       // size
-      std::cout << "Size: " << ts.vertices().size() << std::endl;
-      std::cout << "Raw Energy: " << ts.raw_energy() << std::endl;
-      std::cout << "Raw EM Energy: " << ts.raw_em_energy() << std::endl;
-      */
+      //std::cout << "Size: " << ts.vertices().size() << std::endl;
+      //std::cout << "Raw Energy: " << ts.raw_energy() << std::endl;
+      //std::cout << "Raw EM Energy: " << ts.raw_em_energy() << std::endl;
+
 
       // FORGOT ABOUT STANDARDIZATION! FOR NOW JUST MAKING CONSTANT
-      features.push_back((ts.barycenter().x()- (-78.053759)) / 9.0721161);
-      features.push_back((ts.barycenter().y() - (-38.42437916)) / 8.44353974);
-      features.push_back((ts.barycenter().z() - 415.73801346) / 38.67906222);
-      features.push_back((eigenvector0.x() - (-0.20367516)) / 0.12089926);
-      features.push_back((eigenvector0.y() - (-0.08208414)) / 0.11778267);
-      features.push_back((eigenvector0.z() - (0.96003468)) / 0.04028214);
-      features.push_back((eigenvalues[0] - (129.469984)) / 113.77323897);
-      features.push_back((eigenvalues[1] - (0.891199433)) / 1.24558533);
-      features.push_back((eigenvalues[2] - (0.103415543)) / 0.2412494);
-      features.push_back((sigmasPCA[0] - (9.59357981)) / 4.8851577);
-      features.push_back((sigmasPCA[1] - (1.97646269)) / 1.38499356);
-      features.push_back((sigmasPCA[2] - (2.11838758)) / 2.06176693);
+      features.push_back(ts.barycenter().x());
+      features.push_back(ts.barycenter().y());
+      features.push_back(ts.barycenter().z());
+      features.push_back(eigenvector0.x());
+      features.push_back(eigenvector0.y());
+      features.push_back(eigenvector0.z());
+      features.push_back(eigenvalues[0]);
+      features.push_back(eigenvalues[1]);
+      features.push_back(eigenvalues[2]);
+      features.push_back(sigmasPCA[0]);
+      features.push_back(sigmasPCA[1]);
+      features.push_back(sigmasPCA[2]);
       features.push_back(ts.vertices().size());
       features.push_back(ts.raw_energy());
       features.push_back(ts.raw_em_energy());
 
-      barycenters_x.push_back(ts.barycenter().x());
-      barycenters_y.push_back(ts.barycenter().y());
-      barycenters_z.push_back(ts.barycenter().z());
-
+      //barycenters_x.push_back(ts.barycenter().x());
+      //barycenters_y.push_back(ts.barycenter().y());
+      //barycenters_z.push_back(ts.barycenter().z());
 
       //std::cout << "--------------------" << std::endl;
     }
@@ -246,7 +261,6 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
     input_shapes.push_back({1, N, shapeFeatures});
     data.emplace_back(features);
 
-    // Creating Edges: uncomment when have a Graph as an input
 
     std::vector<float> edges_src;
     std::vector<float> edges_dst;
@@ -299,6 +313,23 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
     */
 
     auto numEdges = static_cast<int>(edges_src.size());
+
+    if (numEdges < 1){
+      std::cout << "No edges for the event - no linking is done." << std::endl;
+      // do not run the network - return the original tracksters
+      std::vector<TICLCandidate> connectedCandidates;
+      TICLCandidate tracksterCandidate;
+
+      for (int trackster_id = 0; trackster_id < N; trackster_id++) {
+        tracksterCandidate.addTrackster(edm::Ptr<Trackster>(tsH, trackster_id));
+      }
+      connectedCandidates.push_back(tracksterCandidate);
+
+      // The final candidates are passed to `resultLinked`
+      resultLinked.insert(std::end(resultLinked), std::begin(connectedCandidates), std::end(connectedCandidates));
+      return;
+    }
+
     input_shapes.push_back({1, 2, numEdges});
     //std::cout << "Num edges: " << numEdges << std::endl;
 
@@ -312,7 +343,19 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
     std::vector<float> A;
     std::vector<float> trackster_index;
 
-    // TODO: Add self-loops
+    // self-loops
+    for (int i=0; i<N; i++){
+      for (int j=0; j<N; j++){
+      if (i == j){
+        A.push_back(1.);
+        trackster_index.push_back(1.);
+      }
+      else {
+        A.push_back(0.);
+        trackster_index.push_back(0.);
+        }
+      }
+    }
 
     for (int i=0; i<numEdges; i++){
       // for source
@@ -332,9 +375,9 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
       }
     }
 
-    input_shapes.push_back({1, 2*numEdges, N});
+    input_shapes.push_back({1, 2*numEdges + N, N});
     data.emplace_back(A);
-    input_shapes.push_back({1, 2*numEdges, N});
+    input_shapes.push_back({1, 2*numEdges + N, N});
     data.emplace_back(trackster_index);
 
     //std::cout << "Adj size: " << A.size() << std::endl;
@@ -342,21 +385,20 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
     std::vector<float> edge_predictions = cache->run(input_names, data, input_shapes)[0];
 
     //std::cout << "Network output shape is " << edge_predictions.size() << std::endl;
-
-    for (int i = 0; i < static_cast<int>(edge_predictions.size()); i++) {
-      std::cout << "Network output for edge " << data[1][i] << "-" << data[1][numEdges + i]
-                << " is: " << edge_predictions[i] << std::endl;
-    }
+    //for (int i = 0; i < static_cast<int>(edge_predictions.size()); i++) {
+    //  std::cout << "Network output for edge " << data[1][i] << "-" << data[1][numEdges + i]
+    //            << " is: " << edge_predictions[i] << std::endl;
+    //}
 
     // Create a graph
     Graph g;
-    const auto classification_threshold = 0.7;
+    const auto classification_threshold = 0.85;
 
-    // Self-loop for not connected nodes
+    // Self-loop for not connected nodes.
     for (int i = 0; i < N; i++){
       g.addEdge(i, i);
     }
-    // Building a predicted graph
+    // Building a predicted graph.
     for (int i = 0; i < numEdges; i++) {
       if (edge_predictions[i] >= classification_threshold) {
         auto src = data[1][i];
@@ -367,7 +409,7 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
       }
     }
 
-    //std::cout << "Following is Depth First Traversal" << std::endl;
+    //std::cout << "Following Depth First Traversal" << std::endl;
     //std::cout << "Connected components are: " << std::endl;
     g.DFS();
 
@@ -388,7 +430,6 @@ void LinkingAlgoByGNN::linkTracksters(const edm::Handle<std::vector<reco::Track>
     resultLinked.insert(std::end(resultLinked), std::begin(connectedCandidates), std::end(connectedCandidates));
   }
 }  // linkTracksters
-
 
 void LinkingAlgoByGNN::fillPSetDescription(edm::ParameterSetDescription &desc) {
   desc.add<std::string>("cutTk",

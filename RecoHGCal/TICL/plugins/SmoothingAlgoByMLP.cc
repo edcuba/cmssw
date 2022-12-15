@@ -114,10 +114,19 @@ void SmoothingAlgoByMLP::linkTracksters(
     const edm::Handle<std::vector<Trackster>> tsH,
     std::vector<TICLCandidate> &resultLinked,
     std::vector<TICLCandidate> &chargedHadronsFromTk,
+    std::vector<double>& prop_tracks_x,
+    std::vector<double>& prop_tracks_y,
+    std::vector<double>& prop_tracks_z,
+    std::vector<double>& prop_tracks_eta,
+    std::vector<double>& prop_tracks_phi,
+    std::vector<double>& prop_tracks_px,
+    std::vector<double>& prop_tracks_py,
+    std::vector<double>& prop_tracks_pz,
+    std::vector<bool>& masked_tracks,
     const TICLGraph &ticlGraph,
     const std::vector<reco::CaloCluster>& layerClusters,
-    const ONNXRuntime *cache)
-{
+    const ONNXRuntime *cache
+) {
   const auto &tracksters = *tsH;
   long int N = tracksters.size();
 

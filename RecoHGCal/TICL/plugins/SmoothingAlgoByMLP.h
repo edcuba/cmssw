@@ -35,17 +35,28 @@ namespace ticl {
                     const edm::ESHandle<MagneticField> bfieldH,
                     const edm::ESHandle<Propagator> propH) override;
 
-    void linkTracksters(const edm::Handle<std::vector<reco::Track>>,
-                        const edm::ValueMap<float> &,
-                        const edm::ValueMap<float> &,
-                        const edm::ValueMap<float> &,
-                        const std::vector<reco::Muon> &,
-                        const edm::Handle<std::vector<Trackster>>,
-                        std::vector<TICLCandidate> &,
-                        std::vector<TICLCandidate> &,
-                        const TICLGraph &,
-                        const std::vector<reco::CaloCluster>& layerClusters,
-                        const ONNXRuntime *cache) override;
+    void linkTracksters(
+      const edm::Handle<std::vector<reco::Track>>,
+      const edm::ValueMap<float> &,
+      const edm::ValueMap<float> &,
+      const edm::ValueMap<float> &,
+      const std::vector<reco::Muon> &,
+      const edm::Handle<std::vector<Trackster>>,
+      std::vector<TICLCandidate> &,
+      std::vector<TICLCandidate> &,
+      std::vector<double> &,
+      std::vector<double> &,
+      std::vector<double> &,
+      std::vector<double> &,
+      std::vector<double> &,
+      std::vector<double> &,
+      std::vector<double> &,
+      std::vector<double> &,
+      std::vector<bool> &,
+      const TICLGraph &,
+      const std::vector<reco::CaloCluster> &,
+      const ONNXRuntime *
+    ) override;
 
     static void fillPSetDescription(edm::ParameterSetDescription &desc);
 
