@@ -130,15 +130,15 @@ void SmoothingAlgoByMLP::linkTracksters(
   const auto &tracksters = *tsH;
   long int N = tracksters.size();
 
-  const float classification_threshold = 0.7;
-  const float radius = 10;
+  const float classification_threshold = 0; // no sigmoid, 0 = 0.5
+  const float radius = 30;
 
   /** PREPARING FEATURES **/
 
   const std::vector<std::string> input_names = {"features"};
   std::vector<float> features;
 
-  const auto shapeFeatures = 43;
+  const auto shapeFeatures = 63;
 
   std::vector<std::pair<unsigned, unsigned>> pairs;
 
@@ -153,7 +153,7 @@ void SmoothingAlgoByMLP::linkTracksters(
 
     // 1. we got a major trackster we want to smooth
     // ignore low energy tracksters
-    if (raw_energy < 50) {
+    if (raw_energy < 10) {
       continue;
     }
 
@@ -255,46 +255,66 @@ void SmoothingAlgoByMLP::linkTracksters(
         (float) barycenter.x(),     // 0
         (float) barycenter.y(),     // 1
         (float) barycenter.z(),     // 2
-        (float) raw_energy,         // 3
-        (float) ts.raw_em_energy(), // 4
-        (float) eigenvalues[0],     // 5
-        (float) eigenvalues[1],     // 6
-        (float) eigenvalues[2],     // 7
-        (float) eigenvector0.x(),   // 8
-        (float) eigenvector0.y(),   // 9
-        (float) eigenvector0.z(),   // 10
-        (float) sigmasPCA[0],       // 11
-        (float) sigmasPCA[1],       // 12
-        (float) sigmasPCA[2],       // 13
-        (float) c_barycenter.x(),   // 14
-        (float) c_barycenter.y(),   // 15
-        (float) c_barycenter.z(),   // 16
-        (float) ct.raw_energy(),    // 17
-        (float) ct.raw_em_energy(), // 18
-        (float) c_eigenvalues[0],   // 19
-        (float) c_eigenvalues[1],   // 20
-        (float) c_eigenvalues[2],   // 21
-        (float) c_eigenvector0.x(), // 22
-        (float) c_eigenvector0.y(), // 23
-        (float) c_eigenvector0.z(), // 24
-        (float) c_sigmasPCA[0],     // 25
-        (float) c_sigmasPCA[1],     // 26
-        (float) c_sigmasPCA[2],     // 27
-        (float) min_z_lc.x(),       // 28
-        (float) min_z_lc.y(),       // 29
-        (float) min_z_lc.z(),       // 30
-        (float) max_z_lc.x(),       // 31
-        (float) max_z_lc.y(),       // 32
-        (float) max_z_lc.z(),       // 33
-        (float) c_min_z_lc.x(),     // 34
-        (float) c_min_z_lc.y(),     // 35
-        (float) c_min_z_lc.z(),     // 36
-        (float) c_max_z_lc.x(),     // 37
-        (float) c_max_z_lc.y(),     // 38
-        (float) c_max_z_lc.z(),     // 39
-        (float) distance,           // 40
-        (float) ts.vertices().size(), // 41
-        (float) ct.vertices().size() // 42
+        (float) barycenter.eta(),   // 3
+        (float) barycenter.phi(), // 4
+        (float) raw_energy,         // 5
+        (float) ts.raw_em_energy(), // 6
+        (float) eigenvalues[0],     // 7
+        (float) eigenvalues[1],     // 8
+        (float) eigenvalues[2],     // 9
+        (float) eigenvector0.x(),   // 10
+        (float) eigenvector0.y(),   // 11
+        (float) eigenvector0.z(),   // 12
+        (float) sigmasPCA[0],       // 13
+        (float) sigmasPCA[1],       // 14
+        (float) sigmasPCA[2],       // 15
+        (float) c_barycenter.x(),   // 16
+        (float) c_barycenter.y(),   // 17
+        (float) c_barycenter.z(),   // 18
+        (float) c_barycenter.eta(), // 19
+        (float) c_barycenter.phi(), // 20
+        (float) ct.raw_energy(),    // 21
+        (float) ct.raw_em_energy(), // 22
+        (float) c_eigenvalues[0],   // 23
+        (float) c_eigenvalues[1],   // 24
+        (float) c_eigenvalues[2],   // 25
+        (float) c_eigenvector0.x(), // 26
+        (float) c_eigenvector0.y(), // 27
+        (float) c_eigenvector0.z(), // 28
+        (float) c_sigmasPCA[0],     // 29
+        (float) c_sigmasPCA[1],     // 30
+        (float) c_sigmasPCA[2],     // 31
+        (float) min_z_lc.x(),       // 32
+        (float) min_z_lc.y(),       // 33
+        (float) min_z_lc.z(),       // 34
+        (float) max_z_lc.x(),       // 35
+        (float) max_z_lc.y(),       // 36
+        (float) max_z_lc.z(),       // 37
+        (float) c_min_z_lc.x(),     // 38
+        (float) c_min_z_lc.y(),     // 39
+        (float) c_min_z_lc.z(),     // 40
+        (float) c_max_z_lc.x(),     // 41
+        (float) c_max_z_lc.y(),     // 42
+        (float) c_max_z_lc.z(),     // 43
+        (float) ts.id_probabilities(0), // 44
+        (float) ts.id_probabilities(1), // 45
+        (float) ts.id_probabilities(2), // 46
+        (float) ts.id_probabilities(3), // 47
+        (float) ts.id_probabilities(4), // 48
+        (float) ts.id_probabilities(5), // 49
+        (float) ts.id_probabilities(6), // 50
+        (float) ts.id_probabilities(7), // 51
+        (float) ct.id_probabilities(0), // 52
+        (float) ct.id_probabilities(1), // 53
+        (float) ct.id_probabilities(2), // 54
+        (float) ct.id_probabilities(3), // 55
+        (float) ct.id_probabilities(4), // 56
+        (float) ct.id_probabilities(5), // 57
+        (float) ct.id_probabilities(6), // 58
+        (float) ct.id_probabilities(7), // 59
+        (float) distance,               // 60
+        (float) ts.vertices().size(),   // 61
+        (float) ct.vertices().size()    // 62
       });
 
       // keep track of the samples
