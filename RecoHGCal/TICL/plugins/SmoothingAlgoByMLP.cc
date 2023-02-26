@@ -44,67 +44,6 @@ void SmoothingAlgoByMLP::initialize(
   propagator_ = propH;
 }
 
-
-/** MLP FEATURE MAP
-
-  // main trackster
-  0 "barycenter_x",
-  1 "barycenter_y",
-  2 "barycenter_z",
-  3 "raw_energy",
-  4 "raw_em_energy",
-  5 "EV1",
-  6 "EV2",
-  7 "EV3",
-  8 "eVector0_x",
-  9 "eVector0_y",
-  10 "eVector0_z",
-  11 "sigmaPCA1",
-  12 "sigmaPCA2",
-  13 "sigmaPCA3",
-
-  // candidate trackster
-  14 "barycenter_x",
-  15 "barycenter_y",
-  16 "barycenter_z",
-  17 "raw_energy",
-  18 "raw_em_energy",
-  19 "EV1",
-  20 "EV2",
-  21 "EV3",
-  22 "eVector0_x",
-  23 "eVector0_y",
-  24 "eVector0_z",
-  25 "sigmaPCA1",
-  26 "sigmaPCA2",
-  27 "sigmaPCA3",
-
-  // main trackster
-  28 min_z_point_x,
-  29 min_z_point_y,
-  30 min_z_point_z,
-  31 max_z_point_x,
-  32 max_z_point_y,
-  33 max_z_point_z,
-
-  // candidate trackster
-  34 min_z_point_x,
-  35 min_z_point_y,
-  36 min_z_point_z,
-  37 max_z_point_x,
-  38 max_z_point_y,
-  39 max_z_point_z,
-
-  // shared
-  40 min_pairwise_planear_distance,
-
-  // main trackster
-  41 num_lc
-
-  // candidate trackster
-  42 num_lc
-*/
-
 void SmoothingAlgoByMLP::linkTracksters(
     const edm::Handle<std::vector<reco::Track>> tkH,
     const edm::ValueMap<float> &tkTime,
