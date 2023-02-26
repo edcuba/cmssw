@@ -692,8 +692,9 @@ void TrackstersMergeProducer::fillDescriptions(edm::ConfigurationDescriptions &d
   desc.add<int>("eid_n_clusters", 10);
   desc.add<edm::FileInPath>(
     "model_path",
-    edm::FileInPath("RecoHGCal/TICL/data/tf_models/PairWiseMLP.16.4.16.51e-CloseByGamma200PUFull.10.0.2.100f.onnx")
+    edm::FileInPath("RecoHGCal/TICL/data/tf_models/MLP_smoothing_CloseByTwoPion_eth10_radius30.onnx")
   );
+  // FOR CloseByPion200PU use MLP_smoothing_CloseByPion200PU_eth5_radius15.onnx (and update threshold and radius in SmoothingAlgoByMLP.cc)
   descriptions.add("trackstersMergeProducer", desc);
 }
 

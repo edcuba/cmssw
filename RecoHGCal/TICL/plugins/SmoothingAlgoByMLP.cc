@@ -131,7 +131,10 @@ void SmoothingAlgoByMLP::linkTracksters(
   long int N = tracksters.size();
 
   const float classification_threshold = 0; // no sigmoid, 0 = 0.5
+
+  // CONFIGURATION OPTIONS
   const float radius = 30;
+  const float energy_threshold = 10;
 
   /** PREPARING FEATURES **/
 
@@ -153,7 +156,7 @@ void SmoothingAlgoByMLP::linkTracksters(
 
     // 1. we got a major trackster we want to smooth
     // ignore low energy tracksters
-    if (raw_energy < 10) {
+    if (raw_energy < energy_threshold) {
       continue;
     }
 
